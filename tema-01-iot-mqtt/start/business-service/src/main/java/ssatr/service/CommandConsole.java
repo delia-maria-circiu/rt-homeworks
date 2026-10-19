@@ -48,7 +48,58 @@ public class CommandConsole implements Runnable {
         //   ("device-1 SET_INTERVAL 1000" -> "device-1" și "SET_INTERVAL 1000")
         //   și publicați comanda pe Config.commandTopic(deviceId).
         //   Afișați un mesaj de eroare dacă linia nu are formatul corect.
-        System.out.println("(trimiterea comenzilor neimplementată): " + line);
+        String[] parts = line.trim().split("\\s+", 2);
+
+        if (parts.length != 2 || parts[0].isBlank()
+                || parts[1].isBlank()) {
+            System.out.println(
+                    "Format invalid. Exemplu: device-1 SET_INTERVAL 1000");
+            return;
+        }
+
+        String deviceId = parts[0].trim();
+        String command = parts[1].trim();
+        String[] commandParts = command.split("\\s+");
+
+        try {
+            switch (commandParts[0].toUpperCase()) {
+                case "SET_INTERVAL":
+                    if (commandParts.length != 2
+                            || Long.parseLong(commandParts[1]) <= 0) {
+                        throw new IllegalArgumentException(
+                                "SET_INTERVAL necesita un numar pozitiv de ms");
+                    }
+                    break;
+
+                case "SET_THRESHOLD":
+                    if (commandParts.length != 2
+                            || !Double.isFinite(
+                            Double.parseDouble(commandParts[1]))) {
+                        throw new IllegalArgumentException(
+                                "SET_THRESHOLD necesita o valoare numerica finita");
+                    }
+                    break;
+
+                case "RESET":
+                case "STATUS":
+                    if (commandParts.length != 1) {
+                        throw new IllegalArgumentException(
+                                "Comanda nu accepta parametri");
+                    }
+                    break;
+
+                default:
+                    throw new IllegalArgumentException(
+                            "Comanda necunoscuta: " + commandParts[0]);
+            }
+
+            mqtt.publish(Config.commandTopic(deviceId), command);
+            System.out.println(
+                    "Comanda trimisa catre " + deviceId + ": " + command);
+
+        } catch (IllegalArgumentException e) {
+            System.out.println("Eroare: " + e.getMessage());
+        }
     }
 
     private void printHelp() {

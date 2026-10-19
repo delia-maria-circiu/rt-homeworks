@@ -46,5 +46,96 @@ public class AperiodicCommandTask implements Runnable {
         //     oprească taskul: publicați "ERROR <motiv>"
         //
         // Vezi exemplul exemple/01-taskuri/.../AperiodicTaskExample.java
+        while (!Thread.currentThread().isInterrupted()) {
+            try {
+                // Preluăm următoarea comandă din coadă.
+                String command = commands.take().trim();
+                String[] parts = command.split("\\s+", 2);
+                String action = parts[0].toUpperCase();
+                String response;
+
+                try {
+                    switch (action) {
+                        case "SET_INTERVAL":
+                            if (parts.length != 2) {
+                                throw new IllegalArgumentException(
+                                        "Lipseste intervalul");
+                            }
+
+                            long interval = Long.parseLong(parts[1].trim());
+
+                            if (interval <= 0) {
+                                throw new IllegalArgumentException(
+                                        "Intervalul trebuie sa fie pozitiv");
+                            }
+
+                            periodic.setPeriodMs(interval);
+                            response = "OK SET_INTERVAL " + interval;
+                            break;
+
+                        case "SET_THRESHOLD":
+                            if (parts.length != 2) {
+                                throw new IllegalArgumentException(
+                                        "Lipseste pragul");
+                            }
+
+                            double threshold =
+                                    Double.parseDouble(parts[1].trim());
+
+                            if (!Double.isFinite(threshold)) {
+                                throw new IllegalArgumentException(
+                                        "Pragul trebuie sa fie un numar finit");
+                            }
+
+                            periodic.setThreshold(threshold);
+                            response = "OK SET_THRESHOLD " + threshold;
+                            break;
+
+                        case "RESET":
+                            if (parts.length != 1) {
+                                throw new IllegalArgumentException(
+                                        "RESET nu accepta parametri");
+                            }
+
+                            sensor.reset();
+                            response = "OK RESET";
+                            break;
+
+                        case "STATUS":
+                            if (parts.length != 1) {
+                                throw new IllegalArgumentException(
+                                        "STATUS nu accepta parametri");
+                            }
+
+                            response = "OK STATUS interval="
+                                    + periodic.getPeriodMs()
+                                    + " threshold="
+                                    + periodic.getThreshold();
+                            break;
+
+                        default:
+                            throw new IllegalArgumentException(
+                                    "Comanda necunoscuta: " + action);
+                    }
+                } catch (IllegalArgumentException e) {
+                    response = "ERROR " + e.getMessage();
+                }
+
+                // Publicăm confirmarea sau eroarea pe topicul de status.
+                String statusMessage = deviceId + ";"
+                        + System.currentTimeMillis() + ";"
+                        + response;
+
+                mqtt.publish(
+                        Config.statusTopic(deviceId),
+                        statusMessage);
+
+                System.out.println(statusMessage);
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
     }
 }

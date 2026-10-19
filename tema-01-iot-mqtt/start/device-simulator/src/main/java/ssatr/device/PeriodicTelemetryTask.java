@@ -1,5 +1,6 @@
 package ssatr.device;
-
+import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.BlockingQueue;
 
 /**
@@ -47,6 +48,50 @@ public class PeriodicTelemetryTask implements Runnable {
         //
         // periodMs se poate schimba în timpul rulării (comanda SET_INTERVAL),
         // deci citiți-l la fiecare job.
+
+        long nextRelease = System.nanoTime();
+
+        while (!Thread.currentThread().isInterrupted()) {
+            long currentPeriod = Math.max(1, periodMs);
+
+            // Citim temperatura senzorului.
+            double temperature = sensor.read();
+
+            // Construim și publicăm mesajul de telemetrie.
+            long timestamp = System.currentTimeMillis();
+
+            String message = deviceId + ";"
+                    + timestamp + ";"
+                    + String.format(Locale.US, "%.2f", temperature);
+
+            mqtt.publish(Config.telemetryTopic(deviceId), message);
+
+            System.out.println("Telemetrie: " + message);
+
+            // Dacă temperatura depășește pragul, semnalăm alarma.
+            if (temperature > threshold) {
+                alarmEvents.offer(temperature);
+            }
+
+            // Calculăm următoarea eliberare folosind o grilă de timp.
+            nextRelease += TimeUnit.MILLISECONDS.toNanos(currentPeriod);
+
+            long now = System.nanoTime();
+            long waitNanos = nextRelease - now;
+
+            // Dacă am întârziat, sărim peste eliberările ratate.
+            while (waitNanos <= 0) {
+                nextRelease += TimeUnit.MILLISECONDS.toNanos(currentPeriod);
+                waitNanos = nextRelease - System.nanoTime();
+            }
+
+            try {
+                TimeUnit.NANOSECONDS.sleep(waitNanos);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
     }
 
     public void setPeriodMs(long periodMs) {
